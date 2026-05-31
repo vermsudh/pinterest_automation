@@ -112,6 +112,18 @@ GOOGLE_SERVICE_ACCOUNT_JSON: str = _require_env("GOOGLE_SERVICE_ACCOUNT_JSON")
 
 
 # ---------------------------------------------------------------------------
+# Gemini API
+#
+# GEMINI_API_KEY is intentionally optional — caption generation is skipped
+# gracefully when the key is absent rather than aborting the run. Using
+# os.environ.get() (not _require_env) achieves this without raising on import.
+# ---------------------------------------------------------------------------
+
+GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL: str = "gemini-1.5-flash"
+
+
+# ---------------------------------------------------------------------------
 # Account dataclass
 # ---------------------------------------------------------------------------
 

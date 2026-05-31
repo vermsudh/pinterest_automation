@@ -27,9 +27,11 @@ from config.settings import (
     DRIVE_FAILED_FOLDER_NAME,
     DRIVE_POSTED_FOLDER_NAME,
     DRIVE_READY_FOLDER_NAME,
+    GEMINI_API_KEY,
     SHEET_QUEUE_TAB,
     load_awon_account,
 )
+from services.caption_generator import fill_missing_captions
 from services.drive_service import get_subfolder_id, list_ready_files
 from services.pinterest_client import PinterestClient
 from services.sheets_service import fetch_pending_rows, mark_skipped
@@ -287,6 +289,26 @@ def main() -> None:
         # missing Drive folders, etc.) lands here.
         _log.error("Setup failed — aborting run: %s", exc)
         sys.exit(1)
+
+    # ------------------------------------------------------------------
+    # STEP 7b — Fill missing captions via Gemini
+    # Runs after queue fetch so pending_rows and drive_files are available.
+    # Skipped entirely when GEMINI_API_KEY is absent — does not abort the run.
+    # ------------------------------------------------------------------
+    if not GEMINI_API_KEY:
+        _log.warning(
+            "GEMINI_API_KEY is not set — skipping automatic caption generation. "
+            "Ensure all caption fields are filled manually before running."
+        )
+    else:
+        fill_missing_captions(
+            sheets_client=sheets_client,
+            sheet_id=account.google_sheet_id,
+            drive_client=drive_client,
+            ready_folder_id=ready_folder_id,
+            pending_rows=pending_rows,
+            drive_files=drive_files,
+        )
 
     # ------------------------------------------------------------------
     # STEP 8 — Process each row
