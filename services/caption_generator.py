@@ -15,7 +15,7 @@ import logging
 import re
 from typing import Any
 
-import google.generativeai as genai
+from google import genai
 
 from config.settings import GEMINI_API_KEY, GEMINI_MODEL, SHEET_QUEUE_TAB
 from services.drive_service import download_file_to_memory
