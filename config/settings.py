@@ -34,7 +34,7 @@ load_dotenv()
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "").strip()
 
 # Gemini model used for multimodal caption generation.
-GEMINI_MODEL: str = "gemini-1.5-flash"
+GEMINI_MODEL: str = "gemini-2.0-flash"
 
 # ---------------------------------------------------------------------------
 # Internal helper
@@ -129,7 +129,7 @@ GOOGLE_SERVICE_ACCOUNT_JSON: str = _require_env("GOOGLE_SERVICE_ACCOUNT_JSON")
 # ---------------------------------------------------------------------------
 
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL: str = "gemini-1.5-flash"
+GEMINI_MODEL: str = "gemini-2.0-flash"
 
 
 # ---------------------------------------------------------------------------

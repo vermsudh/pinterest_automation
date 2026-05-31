@@ -188,12 +188,15 @@ def generate_caption(image_bytes: bytes, filename: str) -> dict[str, str]:
         Exception: Any exception raised by the Gemini SDK is propagated to
             the caller so fill_missing_captions can log and skip the row.
     """
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(GEMINI_MODEL)
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
     mime_type = _detect_mime_type(filename)
-    response = model.generate_content(
-        [{"mime_type": mime_type, "data": image_bytes}, _AWON_PROMPT]
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=[
+            genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+            _AWON_PROMPT,
+        ],
     )
 
     caption = _parse_gemini_response(response.text)
