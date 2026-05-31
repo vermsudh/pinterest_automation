@@ -38,6 +38,8 @@ from services.sheets_service import fetch_pending_rows, mark_skipped
 from uploaders.image_uploader import upload_image_pin
 from uploaders.video_uploader import upload_video_pin
 from utils.logger import setup_logger
+from config.settings import GEMINI_API_KEY
+from services.caption_generator import fill_missing_captions
 
 # setup_logger configures the root handler on first call so every
 # subsequent logging.getLogger() call in other modules inherits the
@@ -282,6 +284,27 @@ def main() -> None:
         if not pending_rows:
             _log.info("No pending rows found. Exiting.")
             sys.exit(0)
+        # ------------------------------------------------------------------
+        # STEP 7b — Generate missing captions via Gemini (optional)
+        # If GEMINI_API_KEY is absent, this step is skipped entirely and
+        # the run continues — captions must then be filled in the Sheet
+        # manually before running.
+        # ------------------------------------------------------------------
+        if GEMINI_API_KEY:
+            _log.info("Gemini API key found — generating missing captions.")
+            fill_missing_captions(
+                sheets_client=sheets_client,
+                sheet_id=account.google_sheet_id,
+                drive_client=drive_client,
+                ready_folder_id=ready_folder_id,
+                pending_rows=pending_rows,
+                drive_files=drive_files,
+            )
+        else:
+            _log.warning(
+                "GEMINI_API_KEY not set — skipping caption generation. "
+                "Ensure all caption fields are filled in the Sheet manually."
+            )
 
     except Exception as exc:  # noqa: BLE001
         # SystemExit is a BaseException subclass and is NOT caught here.

@@ -26,6 +26,15 @@ from dotenv import load_dotenv
 # No-op when variables are already present (e.g. GitHub Actions).
 load_dotenv()
 
+# ---------------------------------------------------------------------------
+# Gemini API (caption generation)
+# ---------------------------------------------------------------------------
+
+# Optional — if absent, caption generation is skipped and the run continues.
+GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "").strip()
+
+# Gemini model used for multimodal caption generation.
+GEMINI_MODEL: str = "gemini-1.5-flash"
 
 # ---------------------------------------------------------------------------
 # Internal helper
