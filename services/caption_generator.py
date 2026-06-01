@@ -10,12 +10,14 @@ in a single batchUpdate call per row.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import re
 from typing import Any
 
 from google import genai
+from PIL import Image
 
 from config.settings import GEMINI_API_KEY, GEMINI_MODEL, SHEET_QUEUE_TAB
 from services.drive_service import download_file_to_memory
@@ -82,6 +84,13 @@ _AWON_PROMPT: str = (
     "text outside the JSON object."
 )
 
+MAX_GEMINI_IMAGE_WIDTH: int = 800
+# Pricing for gemini-2.5-flash-lite — update if GEMINI_MODEL is changed.
+GEMINI_INPUT_COST_PER_TOKEN: float = 0.10 / 1_000_000
+# Pricing for gemini-2.5-flash-lite — update if GEMINI_MODEL is changed.
+GEMINI_OUTPUT_COST_PER_TOKEN: float = 0.40 / 1_000_000
+USD_TO_INR: float = 85.0
+
 # Maps lowercase filename extensions to MIME types for the Gemini API request.
 _MIME_TYPE_MAP: dict[str, str] = {
     "jpg": "image/jpeg",
@@ -95,6 +104,48 @@ _MIME_TYPE_MAP: dict[str, str] = {
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _resize_for_gemini(
+    image_bytes: bytes,
+    max_width: int = MAX_GEMINI_IMAGE_WIDTH,
+) -> tuple[bytes, int]:
+    """Resize and JPEG-encode an image before sending to Gemini.
+
+    Opens *image_bytes* with Pillow and downscales proportionally when its
+    pixel width exceeds *max_width*, using LANCZOS resampling.  The result is
+    always written to a JPEG buffer (quality 85) regardless of the original
+    format, so the caller must always use ``"image/jpeg"`` as the MIME type.
+
+    Args:
+        image_bytes: Raw bytes of the original image file.
+        max_width: Maximum pixel width after resizing.  Images narrower than
+            this value are not scaled but are still re-encoded as JPEG.
+
+    Returns:
+        A tuple of ``(jpeg_bytes, size)`` where *jpeg_bytes* is the JPEG-
+        encoded buffer and *size* is its length in bytes.
+    """
+    img = Image.open(io.BytesIO(image_bytes))
+    if img.width > max_width:
+        ratio = max_width / img.width
+        new_height = int(img.height * ratio)
+        img = img.resize((max_width, new_height), Image.LANCZOS)
+
+    if img.mode in ("RGBA", "P", "LA"):
+        img = img.convert("RGB")
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    jpeg_bytes = buf.getvalue()
+    new_size = len(jpeg_bytes)
+
+    logger.info(
+        "Resized image from %.1f MB to %.0f KB before sending to Gemini.",
+        len(image_bytes) / 1_048_576,
+        new_size / 1024,
+    )
+    return jpeg_bytes, new_size
 
 
 def _detect_mime_type(filename: str) -> str:
@@ -190,13 +241,33 @@ def generate_caption(image_bytes: bytes, filename: str) -> dict[str, str]:
     """
     client = genai.Client(api_key=GEMINI_API_KEY)
 
-    mime_type = _detect_mime_type(filename)
+    resized_bytes, _ = _resize_for_gemini(image_bytes)
     response = client.models.generate_content(
         model=GEMINI_MODEL,
         contents=[
-            genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+            genai.types.Part.from_bytes(data=resized_bytes, mime_type="image/jpeg"),
             _AWON_PROMPT,
         ],
+    )
+
+    usage = response.usage_metadata
+    input_tokens: int = (usage.prompt_token_count or 0) if usage else 0
+    output_tokens: int = (usage.candidates_token_count or 0) if usage else 0
+    total_tokens: int = input_tokens + output_tokens
+    cost_usd: float = (
+        input_tokens * GEMINI_INPUT_COST_PER_TOKEN
+        + output_tokens * GEMINI_OUTPUT_COST_PER_TOKEN
+    )
+    cost_inr: float = cost_usd * USD_TO_INR
+    logger.info(
+        "Gemini usage — model: %s | input: %d tokens | output: %d tokens"
+        " | total: %d tokens | estimated cost: $%.6f (₹%.3f)",
+        GEMINI_MODEL,
+        input_tokens,
+        output_tokens,
+        total_tokens,
+        cost_usd,
+        cost_inr,
     )
 
     caption = _parse_gemini_response(response.text)

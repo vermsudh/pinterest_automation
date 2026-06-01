@@ -33,8 +33,17 @@ load_dotenv()
 # Optional — if absent, caption generation is skipped and the run continues.
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "").strip()
 
-# Gemini model used for multimodal caption generation.
-GEMINI_MODEL: str = "gemini-2.0-flash"
+# Available Gemini models for caption generation.
+GEMINI_MODELS: dict[str, str] = {
+    "flash-lite": "gemini-2.5-flash-lite",
+    "flash": "gemini-2.5-flash",
+    "flash-3": "gemini-3-flash-preview",
+    "flash-lite-3": "gemini-3.1-flash-lite",
+    "pro": "gemini-2.5-pro",
+}
+
+# Default model — most cost-efficient for caption generation
+GEMINI_MODEL: str = GEMINI_MODELS["flash-lite"]
 
 # ---------------------------------------------------------------------------
 # Internal helper
@@ -129,7 +138,6 @@ GOOGLE_SERVICE_ACCOUNT_JSON: str = _require_env("GOOGLE_SERVICE_ACCOUNT_JSON")
 # ---------------------------------------------------------------------------
 
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL: str = "gemini-2.0-flash"
 
 
 # ---------------------------------------------------------------------------
