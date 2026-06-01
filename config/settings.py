@@ -80,6 +80,12 @@ def _require_env(name: str) -> str:
 PINTEREST_API_BASE_URL: str = "https://api.pinterest.com/v5"
 PINTEREST_TOKEN_URL: str = "https://api.pinterest.com/v5/oauth/token"
 
+# Default destination URL written into column F (destination_link) when
+# sync_queue.py appends a new row. Operators can override per-row manually.
+PINTEREST_DESTINATION_URL: str = os.environ.get(
+    "PINTEREST_DESTINATION_URL", "https://awon.world"
+)
+
 # ---------------------------------------------------------------------------
 # Google Sheets structure
 # ---------------------------------------------------------------------------
