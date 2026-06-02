@@ -28,6 +28,7 @@ from config.settings import (
     DRIVE_POSTED_FOLDER_NAME,
     DRIVE_READY_FOLDER_NAME,
     GEMINI_API_KEY,
+    PINTEREST_DEFAULT_BOARD,
     SHEET_QUEUE_TAB,
     load_awon_account,
 )
@@ -281,8 +282,67 @@ def main() -> None:
             sheet_id=account.google_sheet_id,
             ready_folder_id=ready_folder_id,
             drive_files=drive_files,
+            default_board=PINTEREST_DEFAULT_BOARD,
         )
         _log.info("Queue sync complete. %d new row(s) appended.", new_rows_added)
+
+        # ------------------------------------------------------------------
+        # STEP 6c — Recover Failed rows where board_name was the only problem
+        # Rows marked Failed with an empty board_name column are reset to
+        # Pending and assigned the default board so they are retried this run.
+        # ------------------------------------------------------------------
+        _log.info("Checking for Failed rows with missing board_name...")
+        try:
+            all_rows_result = (
+                sheets_client.spreadsheets()
+                .values()
+                .get(
+                    spreadsheetId=account.google_sheet_id,
+                    range=f"{SHEET_QUEUE_TAB}!A2:K",
+                )
+                .execute()
+            )
+            recovered: int = 0
+            recover_updates: list[dict] = []
+            for i, row_vals in enumerate(all_rows_result.get("values", [])):
+                sheet_row = i + 2
+                status = row_vals[7].strip() if len(row_vals) > 7 else ""
+                board_name = row_vals[4].strip() if len(row_vals) > 4 else ""
+                error_msg = row_vals[10].strip() if len(row_vals) > 10 else ""
+                if (
+                    status == "Failed"
+                    and not board_name
+                    and "board_name" in error_msg
+                ):
+                    recover_updates.append({
+                        "range": f"{SHEET_QUEUE_TAB}!E{sheet_row}",
+                        "values": [[PINTEREST_DEFAULT_BOARD]],
+                    })
+                    recover_updates.append({
+                        "range": f"{SHEET_QUEUE_TAB}!H{sheet_row}",
+                        "values": [["Pending"]],
+                    })
+                    recover_updates.append({
+                        "range": f"{SHEET_QUEUE_TAB}!K{sheet_row}",
+                        "values": [[""]],
+                    })
+                    recovered += 1
+
+            if recover_updates:
+                sheets_client.spreadsheets().values().batchUpdate(
+                    spreadsheetId=account.google_sheet_id,
+                    body={"valueInputOption": "RAW", "data": recover_updates},
+                ).execute()
+                _log.info(
+                    "Recovered %d Failed row(s) with empty board_name → reset to Pending "
+                    "with board '%s'.",
+                    recovered,
+                    PINTEREST_DEFAULT_BOARD,
+                )
+            else:
+                _log.info("No Failed rows with missing board_name found.")
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("Board name recovery step failed (non-fatal): %s", exc)
 
         # ------------------------------------------------------------------
         # STEP 7 — Fetch queue and Drive file listing

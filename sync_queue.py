@@ -22,6 +22,7 @@ from auth.google_auth import (
 from config.settings import (
     DRIVE_READY_FOLDER_NAME,
     GEMINI_API_KEY,
+    PINTEREST_DEFAULT_BOARD,
     PINTEREST_DESTINATION_URL,
     SHEET_QUEUE_TAB,
     load_awon_account,
@@ -78,17 +79,21 @@ def _append_queue_row(
     sheet_id: str,
     filename: str,
     media_type: str,
+    default_board: str,
 ) -> None:
     """Append one Pending row to the Queue tab for a new Drive file.
 
-    C/D/E/G (title, description, board_name, alt_text) are left blank;
-    F defaults to PINTEREST_DESTINATION_URL; H is set to 'Pending'.
+    C/D/G (title, description, alt_text) are left blank; E (board_name)
+    is set to ``default_board``; F defaults to PINTEREST_DESTINATION_URL;
+    H is set to 'Pending'.
 
     Args:
         sheets_client: Authenticated Google Sheets API client.
         sheet_id: Google Sheets document ID.
         filename: Exact Drive filename for column A.
         media_type: 'image' or 'video' for column B.
+        default_board: Board name written into column E.  Must match an
+            existing Pinterest board name exactly (case-sensitive).
     """
     (
         sheets_client.spreadsheets()
@@ -98,7 +103,7 @@ def _append_queue_row(
             range=f"{SHEET_QUEUE_TAB}!A:H",
             valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
-            body={"values": [[filename, media_type, "", "", "", PINTEREST_DESTINATION_URL, "", "Pending"]]},
+            body={"values": [[filename, media_type, "", "", default_board, PINTEREST_DESTINATION_URL, "", "Pending"]]},
         )
         .execute()
     )
@@ -128,6 +133,7 @@ def sync_queue_with_clients(
     sheet_id: str,
     ready_folder_id: str,
     drive_files: dict[str, str],
+    default_board: str = "",
 ) -> int:
     """Sync new Drive Ready/ files into the Google Sheets Queue tab.
 
@@ -149,6 +155,10 @@ def sync_queue_with_clients(
             for future use; not called directly in this function).
         drive_files: Mapping of filename → Drive file ID for every file
             currently in the Ready/ folder.
+        default_board: Board name written into column E of each new row.
+            Must match an existing Pinterest board name exactly
+            (case-sensitive).  Defaults to ``""`` so callers that do not
+            supply a board leave the cell blank rather than raising.
 
     Returns:
         The number of rows successfully appended to the Queue tab.
@@ -173,7 +183,7 @@ def sync_queue_with_clients(
             _log.warning("Skipping '%s' — unrecognised file extension.", filename)
             continue
         try:
-            _append_queue_row(sheets_client, sheet_id, filename, media_type)
+            _append_queue_row(sheets_client, sheet_id, filename, media_type, default_board)
             appended += 1
             _log.info("Appended row for '%s' (media_type=%s).", filename, media_type)
         except Exception as exc:  # noqa: BLE001
@@ -220,6 +230,7 @@ def sync_queue() -> None:
         sheet_id=account.google_sheet_id,
         ready_folder_id=ready_folder_id,
         drive_files=drive_files,
+        default_board=PINTEREST_DEFAULT_BOARD,
     )
 
     captions_generated: int = 0

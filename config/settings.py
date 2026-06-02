@@ -88,6 +88,13 @@ PINTEREST_DESTINATION_URL: str = os.environ.get(
     "PINTEREST_DESTINATION_URL", "https://awon.world"
 )
 
+# Default board name written into column E (board_name) when sync_queue
+# appends a new row. Must exactly match an existing board name on the
+# Pinterest account. Override via the PINTEREST_DEFAULT_BOARD env var.
+PINTEREST_DEFAULT_BOARD: str = os.environ.get(
+    "PINTEREST_DEFAULT_BOARD", "Modern Farmhouse Design India"
+)
+
 # ---------------------------------------------------------------------------
 # Google Sheets structure
 # ---------------------------------------------------------------------------
