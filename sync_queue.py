@@ -122,6 +122,66 @@ def _print_summary(
     print("============================")
 
 
+def sync_queue_with_clients(
+    sheets_client: Any,
+    drive_client: Any,
+    sheet_id: str,
+    ready_folder_id: str,
+    drive_files: dict[str, str],
+) -> int:
+    """Sync new Drive Ready/ files into the Google Sheets Queue tab.
+
+    Compares ``drive_files`` against every filename already present in the
+    Queue tab (all statuses) and appends a Pending row for each file not yet
+    tracked.  Rows with unrecognised file extensions are skipped with a
+    warning.  Per-file append failures are logged and skipped without aborting.
+
+    This is a pure library function — it never calls sys.exit() and never
+    performs authentication.  Call it after clients and folder IDs have already
+    been resolved.
+
+    Args:
+        sheets_client: Authenticated Google Sheets API client.
+        drive_client: Authenticated Google Drive API client (reserved for
+            future use; not called directly in this function).
+        sheet_id: Google Sheets document ID.
+        ready_folder_id: Drive folder ID for the Ready/ subfolder (reserved
+            for future use; not called directly in this function).
+        drive_files: Mapping of filename → Drive file ID for every file
+            currently in the Ready/ folder.
+
+    Returns:
+        The number of rows successfully appended to the Queue tab.
+    """
+    if not drive_files:
+        _log.info("Ready/ folder is empty — nothing to sync.")
+        return 0
+
+    sheet_filenames: set[str] = _fetch_sheet_filenames(sheets_client, sheet_id)
+    new_filenames: list[str] = [
+        name for name in drive_files if name not in sheet_filenames
+    ]
+
+    if not new_filenames:
+        _log.info("All %d Drive file(s) already present in Sheet.", len(drive_files))
+        return 0
+
+    appended: int = 0
+    for filename in new_filenames:
+        media_type = _infer_media_type(filename)
+        if media_type is None:
+            _log.warning("Skipping '%s' — unrecognised file extension.", filename)
+            continue
+        try:
+            _append_queue_row(sheets_client, sheet_id, filename, media_type)
+            appended += 1
+            _log.info("Appended row for '%s' (media_type=%s).", filename, media_type)
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("Failed to append row for '%s': %s", filename, exc)
+
+    return appended
+
+
 def sync_queue() -> None:
     """Sync new Drive Ready/ files into the Google Sheets Queue tab.
 
@@ -152,33 +212,18 @@ def sync_queue() -> None:
     sheet_filenames: set[str] = _fetch_sheet_filenames(
         sheets_client, account.google_sheet_id
     )
-    new_filenames: list[str] = [
-        name for name in drive_files if name not in sheet_filenames
-    ]
-    already_in_sheet: int = len(drive_files) - len(new_filenames)
+    already_in_sheet: int = sum(1 for name in drive_files if name in sheet_filenames)
 
-    if not new_filenames:
-        _log.info("All %d Drive file(s) already present in Sheet.", len(drive_files))
-        _print_summary(0, already_in_sheet, 0, 0)
-        return
-
-    appended: list[str] = []
-    for filename in new_filenames:
-        media_type = _infer_media_type(filename)
-        if media_type is None:
-            _log.warning("Skipping '%s' — unrecognised file extension.", filename)
-            continue
-        try:
-            _append_queue_row(
-                sheets_client, account.google_sheet_id, filename, media_type
-            )
-            appended.append(filename)
-            _log.info("Appended row for '%s' (media_type=%s).", filename, media_type)
-        except Exception as exc:  # noqa: BLE001
-            _log.warning("Failed to append row for '%s': %s", filename, exc)
+    appended_count: int = sync_queue_with_clients(
+        sheets_client=sheets_client,
+        drive_client=drive_client,
+        sheet_id=account.google_sheet_id,
+        ready_folder_id=ready_folder_id,
+        drive_files=drive_files,
+    )
 
     captions_generated: int = 0
-    if appended and GEMINI_API_KEY:
+    if appended_count and GEMINI_API_KEY:
         _log.info("Gemini API key found — generating captions for new rows.")
         try:
             pending_rows = fetch_pending_rows(sheets_client, account.google_sheet_id)
@@ -191,7 +236,8 @@ def sync_queue() -> None:
                 drive_files=drive_files,
             )
             captions_generated = sum(
-                1 for f in appended if _infer_media_type(f) == "image"
+                1 for name in drive_files
+                if name not in sheet_filenames and _infer_media_type(name) == "image"
             )
         except Exception as exc:  # noqa: BLE001
             _log.warning("Caption generation failed: %s", exc)
@@ -201,7 +247,7 @@ def sync_queue() -> None:
             "Fill title, description, and alt_text manually in the Sheet."
         )
 
-    _print_summary(len(appended), already_in_sheet, captions_generated, len(appended))
+    _print_summary(appended_count, already_in_sheet, captions_generated, appended_count)
 
 
 if __name__ == "__main__":

@@ -35,11 +35,10 @@ from services.caption_generator import fill_missing_captions
 from services.drive_service import get_subfolder_id, list_ready_files
 from services.pinterest_client import PinterestClient
 from services.sheets_service import fetch_pending_rows, mark_skipped
+from sync_queue import sync_queue_with_clients
 from uploaders.image_uploader import upload_image_pin
 from uploaders.video_uploader import upload_video_pin
 from utils.logger import setup_logger
-from config.settings import GEMINI_API_KEY
-from services.caption_generator import fill_missing_captions
 
 # setup_logger configures the root handler on first call so every
 # subsequent logging.getLogger() call in other modules inherits the
@@ -272,10 +271,23 @@ def main() -> None:
         )
 
         # ------------------------------------------------------------------
+        # STEP 6b — Sync new Drive files into the Sheet queue
+        # ------------------------------------------------------------------
+        drive_files: dict[str, str] = list_ready_files(drive_client, ready_folder_id)
+        _log.info("Syncing new Drive Ready/ files into Sheet queue...")
+        new_rows_added = sync_queue_with_clients(
+            sheets_client=sheets_client,
+            drive_client=drive_client,
+            sheet_id=account.google_sheet_id,
+            ready_folder_id=ready_folder_id,
+            drive_files=drive_files,
+        )
+        _log.info("Queue sync complete. %d new row(s) appended.", new_rows_added)
+
+        # ------------------------------------------------------------------
         # STEP 7 — Fetch queue and Drive file listing
         # ------------------------------------------------------------------
         pending_rows = fetch_pending_rows(sheets_client, account.google_sheet_id)
-        drive_files: dict[str, str] = list_ready_files(drive_client, ready_folder_id)
         cover_image_urls: dict[int, str] = _fetch_cover_image_urls(
             sheets_client, account.google_sheet_id
         )
@@ -312,26 +324,6 @@ def main() -> None:
         # missing Drive folders, etc.) lands here.
         _log.error("Setup failed — aborting run: %s", exc)
         sys.exit(1)
-
-    # ------------------------------------------------------------------
-    # STEP 7b — Fill missing captions via Gemini
-    # Runs after queue fetch so pending_rows and drive_files are available.
-    # Skipped entirely when GEMINI_API_KEY is absent — does not abort the run.
-    # ------------------------------------------------------------------
-    if not GEMINI_API_KEY:
-        _log.warning(
-            "GEMINI_API_KEY is not set — skipping automatic caption generation. "
-            "Ensure all caption fields are filled manually before running."
-        )
-    else:
-        fill_missing_captions(
-            sheets_client=sheets_client,
-            sheet_id=account.google_sheet_id,
-            drive_client=drive_client,
-            ready_folder_id=ready_folder_id,
-            pending_rows=pending_rows,
-            drive_files=drive_files,
-        )
 
     # ------------------------------------------------------------------
     # STEP 8 — Process each row

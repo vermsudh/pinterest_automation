@@ -77,7 +77,9 @@ def _require_env(name: str) -> str:
 # Pinterest API endpoints
 # ---------------------------------------------------------------------------
 
-PINTEREST_API_BASE_URL: str = "https://api.pinterest.com/v5"
+PINTEREST_API_BASE_URL = os.getenv(
+    "PINTEREST_API_BASE_URL", "https://api.pinterest.com/v5"
+)
 PINTEREST_TOKEN_URL: str = "https://api.pinterest.com/v5/oauth/token"
 
 # Default destination URL written into column F (destination_link) when
