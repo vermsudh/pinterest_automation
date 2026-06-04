@@ -24,4 +24,7 @@ jobs:
           PINTEREST_CLIENT_SECRET: ${{ secrets.PINTEREST_CLIENT_SECRET }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          PINTEREST_API_BASE_URL: ${{ secrets.PINTEREST_API_BASE_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PINTEREST_DEFAULT_BOARD: ${{ secrets.PINTEREST_DEFAULT_BOARD }}
         run: python main.py
