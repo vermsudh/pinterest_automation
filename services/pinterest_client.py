@@ -243,6 +243,36 @@ class PinterestClient:
 
         _log.info("Loaded %d board(s) from the Pinterest account.", len(boards))
         return boards
+    
+    def create_board(self,name: str,privacy: str = "PUBLIC",) -> dict[str, Any]:
+        """Create a new Pinterest board on the authenticated account.
+
+        Calls POST /v5/boards to create a board with the given name and
+        privacy setting. Requires boards:write scope.
+
+        Args:
+            name: The board name. Must be unique within the account.
+            privacy: Either "PUBLIC" or "SECRET". Defaults to "PUBLIC".
+
+        Returns:
+            A dict containing the new board's "id" and "name" fields.
+
+        Raises:
+            RuntimeError: For any non-retryable HTTP error.
+            RetryableError: For HTTP 429, 500, or 503 responses.
+        """
+        payload: dict[str, Any] = {
+            "name": name,
+            "privacy": privacy,
+        }
+        response = self._session.post(
+            f"{PINTEREST_API_BASE_URL}/boards",
+            json=payload,
+        )
+        data = self._handle_response(response)
+        self._check_rate_limit(response)
+        _log.info("Created board '%s' with ID %s.", name, data.get("id"))
+        return data
 
     def create_image_pin(
         self,
