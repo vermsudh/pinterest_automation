@@ -4,7 +4,9 @@ Handles the full image Pin creation flow for a single queue row.
 1. Validates all Pin fields via validators.py before touching any API.
 2. Resolves the Drive file ID from the pre-fetched ready-files mapping.
 3. Downloads the image file into memory (bytes) — nothing is written to disk.
-4. Detects the MIME type from the filename extension.
+4. Detects the MIME type from the filename extension, then applies the
+   A.won wordmark watermark via watermark_service.apply_watermark() (still
+   entirely in memory; falls back to the unwatermarked bytes on error).
 5. Calls pinterest_client to POST /v5/pins with source_type=image_base64,
    wrapping the call with with_retry so HTTP 429/500/503 are retried.
 6. On success: writes Posted status back to the Sheet and moves the Drive
@@ -31,6 +33,7 @@ from services.drive_service import (
 )
 from services.pinterest_client import PinterestClient, RetryableError
 from services.sheets_service import PinRow, mark_failed, mark_posted
+from services.watermark_service import apply_watermark
 from utils.retry import with_retry
 from utils.validators import ValidationError, validate_row
 
@@ -198,9 +201,10 @@ def upload_image_pin(
         return False
 
     # ------------------------------------------------------------------
-    # Steps 3–6 — Download, detect MIME type, resolve board, upload.
-    # Any exception here (Drive error, API error, exhausted retries)
-    # results in the row being marked Failed and the file moved to Failed/.
+    # Steps 3–6 — Download, detect MIME type, watermark, resolve board,
+    # upload. Any exception here (Drive error, API error, exhausted
+    # retries) results in the row being marked Failed and the file moved
+    # to Failed/.
     # ------------------------------------------------------------------
     try:
         # Step 3: Download the image into memory.
@@ -208,6 +212,10 @@ def upload_image_pin(
 
         # Step 4: Derive MIME type from filename extension.
         content_type = _detect_content_type(row.image_filename, row.row_number)
+
+        # Step 4b: Composite the A.won wordmark onto the image. Falls back to
+        # the original bytes on any watermarking error — never blocks a post.
+        image_bytes = apply_watermark(image_bytes, content_type)
 
         # Step 5: Resolve board_id — board_map key membership was already
         # confirmed by validate_row(), so this lookup cannot KeyError.

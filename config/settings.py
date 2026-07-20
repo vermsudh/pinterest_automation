@@ -43,7 +43,7 @@ GEMINI_MODELS: dict[str, str] = {
 }
 
 # Default model — most cost-efficient for caption generation
-GEMINI_MODEL: str = GEMINI_MODELS["flash-lite"]
+GEMINI_MODEL: str = GEMINI_MODELS["pro"]
 
 # ---------------------------------------------------------------------------
 # Internal helper
@@ -132,6 +132,32 @@ RATE_LIMIT_BUFFER: int = 5
 # Total number of attempts (including the first) before a row is marked Failed.
 # Backoff sequence: immediate, 2s, 4s, 8s, 16s.
 MAX_RETRY_ATTEMPTS: int = 5
+
+# ---------------------------------------------------------------------------
+# Watermark (image Pins only — see services/watermark_service.py)
+# ---------------------------------------------------------------------------
+
+# Master on/off switch. When False, apply_watermark() returns the source
+# image bytes unchanged and no Pillow work is performed at all.
+WATERMARK_ENABLED: bool = os.environ.get("WATERMARK_ENABLED", "true").strip().lower() == "true"
+
+# Opacity multiplier (0.0-1.0) applied to the watermark's existing per-pixel
+# alpha channel — the soft anti-aliased edges of the source PNG are preserved
+# rather than flattened.
+WATERMARK_OPACITY: float = float(os.environ.get("WATERMARK_OPACITY", "0.55"))
+
+# Watermark width as a fraction of the source image width; height scales
+# proportionally to preserve the watermark's own aspect ratio.
+WATERMARK_WIDTH_PCT: float = float(os.environ.get("WATERMARK_WIDTH_PCT", "0.18"))
+
+# Margin from the bottom and right edges of the source image, as a fraction
+# of the source image width.
+WATERMARK_PADDING_PCT: float = float(os.environ.get("WATERMARK_PADDING_PCT", "0.03"))
+
+# Path to the static watermark PNG asset (transparent background, white
+# wordmark, cropped tight to its content). Loaded once and cached in memory
+# by watermark_service.py since the asset never changes during a run.
+WATERMARK_PATH: str = os.environ.get("WATERMARK_PATH", "assets/watermark.png")
 
 # ---------------------------------------------------------------------------
 # Google credentials
